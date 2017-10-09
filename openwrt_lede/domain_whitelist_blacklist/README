@@ -1,0 +1,107 @@
+# DNS whitelist / blacklist router using OpenWrt/LEDE, Dnsmasq and IP sets
+
+# DNS requests for selected domains are forwarded by dnsmasq to 
+# ipset-dns, where they are resolved and added to the specified IP sets. 
+# The IP sets are later used in firewall rules for IP based filtering.
+
+opkg update
+opkg install ipset ipset-dns
+
+uci add_list dhcp.@dnsmasq[0].server='/slashdot.org/127.0.0.1#53001'
+uci add_list dhcp.@dnsmasq[0].server='/digg.com/127.0.0.1#53001'
+uci add_list dhcp.@dnsmasq[0].server='/reddit.com/127.0.0.1#53001'
+
+# By default, ipset-dns resolves using /tmp/resolv.conf.auto
+# but this fails at boot due to DHCP not being ready. hardcode address instead
+uci set ipset-dns.@ipset-dns[0].ipset='domain-filter-ipv4'
+uci set ipset-dns.@ipset-dns[0].ipset6='domain-filter-ipv6'
+uci set ipset-dns.@ipset-dns[0].port='53001'
+uci set ipset-dns.@ipset-dns[0].dns='8.8.8.8'
+
+uci add firewall ipset
+uci set firewall.@ipset[-1].name='domain-filter-ipv4'
+uci set firewall.@ipset[-1].storage='hash'
+uci set firewall.@ipset[-1].family='ipv4'
+uci set firewall.@ipset[-1].match='dest_ip'
+uci add firewall ipset
+uci set firewall.@ipset[-1].name='domain-filter-ipv6'
+uci set firewall.@ipset[-1].storage='hash'
+uci set firewall.@ipset[-1].family='ipv6'
+uci set firewall.@ipset[-1].match='dest_ip'
+uci add firewall rule
+uci set firewall.@rule[-1].name='Match-domain-filter-ipv4'
+uci set firewall.@rule[-1].src='lan'
+uci set firewall.@rule[-1].dest='wan'
+uci set firewall.@rule[-1].ipset='domain-filter-ipv4'
+uci set firewall.@rule[-1].proto='all'
+uci set firewall.@rule[-1].family='ipv4'
+uci set firewall.@rule[-1].target='ACCEPT'
+uci set firewall.@rule[-1].enabled='0'
+uci add firewall rule
+uci set firewall.@rule[-1].name='Match-domain-filter-ipv6'
+uci set firewall.@rule[-1].src='lan'
+uci set firewall.@rule[-1].dest='wan'
+uci set firewall.@rule[-1].ipset='domain-filter-ipv6'
+uci set firewall.@rule[-1].proto='all'
+uci set firewall.@rule[-1].family='ipv6'
+uci set firewall.@rule[-1].target='ACCEPT'
+uci set firewall.@rule[-1].enabled='0'
+
+# Enable Whitelist
+uci set firewall.@zone[0].forward='REJECT'
+uci set firewall.@rule[-2].target='ACCEPT'
+uci set firewall.@rule[-1].target='ACCEPT'
+uci delete firewall.@rule[-2].enabled
+uci delete firewall.@rule[-1].enabled
+uci set dhcp.@dnsmasq[0].noresolv='1'
+uci delete dhcp.@dnsmasq[0].resolvfile
+
+# Disable Whitelist
+uci set firewall.@zone[0].forward='ACCEPT'
+uci set firewall.@rule[-2].enabled='0'
+uci set firewall.@rule[-1].enabled='0'
+uci delete dhcp.@dnsmasq[0].noresolv
+uci set dhcp.@dnsmasq[0].resolvfile='/tmp/resolv.conf.auto'
+
+# Enable Blacklist
+uci set firewall.@zone[0].forward='ACCEPT'
+uci set firewall.@rule[-2].target='REJECT'
+uci set firewall.@rule[-1].target='REJECT'
+uci delete dhcp.@dnsmasq[0].noresolv
+uci set dhcp.@dnsmasq[0].resolvfile='/tmp/resolv.conf.auto'
+
+# Disable Blacklist
+uci set firewall.@rule[-2].enabled='0'
+uci set firewall.@rule[-1].enabled='0'
+
+# Commit Changes
+uci commit
+/etc/init.d/firewall reload
+/etc/init.d/ipset-dns reload
+/etc/init.d/dnsmasq reload
+
+# Adding/Removing entries in LuCI
+- Network -> DHCP and DNS -> General Settings -> DNS forwardings
+- change entries. Ensure they have the format:
+    /example.org/127.0.0.1#53001
+- Save & Apply
+
+# Adding specific IP's
+- Add entries to /etc/rc.local
+    ipset add domain-filter-ipv4 1.2.3.4
+- Reload with
+    sh /etc/rc.local
+
+# Debugging
+Status -> System Log
+ipset list
+tcpdump
+
+uci set dhcp.@dnsmasq[0].logqueries='1'
+uci commit dhcp
+/etc/init.d/dnsmasq reload
+logread -f | grep dnsmasq
+uci delete dhcp.@dnsmasq[0].logqueries
+uci commit dhcp
+/etc/init.d/dnsmasq reload
+
