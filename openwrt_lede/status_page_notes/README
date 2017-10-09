@@ -1,0 +1,11 @@
+# Putting custom notes/MOTD on OpenWrt/LEDE LuCI Status-Overview page
+
+# htm files placed in this directory will be included when rendering
+# the Status-Overview page. We can use this for custom notes and notices
+
+cat > /usr/lib/lua/luci/view/admin_status/index/notes.htm << EOF
+<h2 name="content"><%:Notes%></h2>
+<pre>
+Text goes here
+</pre>
+EOF
