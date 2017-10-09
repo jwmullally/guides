@@ -1,0 +1,112 @@
+This patch for OpenWrt/LEDE LuCI makes everything under the "Status" page
+publicly accessible without a login. Everything there should be read only.
+
+We move the "Processes" page under "System" as it contains options to modify
+running processes, and replace it under "Status" with a read-only version.
+
+WARNING: This increases the attack surface of the webUI, use at your own risk.
+
+Apply with: patch --directory=/ -p0 < public_status_pages.patch
+After applying, clear web server cache: rm -rf /tmp/luci-*
+
+Tested on LEDE v17.01.3
+
+--- www/index.html.old	2017-10-08 17:04:58.135384906 +0000
++++ www/index.html	2017-10-08 17:07:00.724855027 +0000
+@@ -3,9 +3,9 @@
+ <html xmlns="http://www.w3.org/1999/xhtml">
+ <head>
+ <meta http-equiv="Cache-Control" content="no-cache" />
+-<meta http-equiv="refresh" content="0; URL=/cgi-bin/luci" />
++<meta http-equiv="refresh" content="0; URL=/cgi-bin/luci/admin/status" />
+ </head>
+ <body style="background-color: white">
+-<a style="color: black; font-family: arial, helvetica, sans-serif;" href="/cgi-bin/luci">LuCI - Lua Configuration Interface</a>
++<a style="color: black; font-family: arial, helvetica, sans-serif;" href="/cgi-bin/luci/admin/status">LuCI - Lua Configuration Interface</a>
+ </body>
+ </html>
+--- usr/lib/lua/luci/controller/admin/status.lua.old	2017-10-08 17:15:01.683236565 +0000
++++ usr/lib/lua/luci/controller/admin/status.lua	2017-10-08 17:15:26.193165238 +0000
+@@ -5,7 +5,7 @@
+ module("luci.controller.admin.status", package.seeall)
+ 
+ function index()
+-	entry({"admin", "status"}, alias("admin", "status", "overview"), _("Status"), 20).index = true
++	entry({"admin", "status"}, alias("admin", "status", "overview"), _("Status"), 20).sysauth = false
+ 	entry({"admin", "status", "overview"}, template("admin_status/index"), _("Overview"), 1)
+ 
+ 	entry({"admin", "status", "iptables"}, template("admin_status/iptables"), _("Firewall"), 2).leaf = true
+--- usr/lib/lua/luci/controller/admin/system.lua.old	2017-10-08 17:16:14.153029598 +0000
++++ usr/lib/lua/luci/controller/admin/system.lua	2017-10-08 16:14:33.451968210 +0000
+@@ -18,6 +18,8 @@
+ 		entry({"admin", "system", "packages", "ipkg"}, form("admin_system/ipkg"))
+ 	end
+ 
++	entry({"admin", "system", "processes"}, cbi("admin_system/processes"), _("Processes"), 6)
++
+ 	entry({"admin", "system", "startup"}, form("admin_system/startup"), _("Startup"), 45)
+ 	entry({"admin", "system", "crontab"}, form("admin_system/crontab"), _("Scheduled Tasks"), 46)
+ 
+--- usr/lib/lua/luci/model/cbi/admin_status/processes.lua.old	2017-10-08 18:01:17.810633675 +0000
++++ usr/lib/lua/luci/model/cbi/admin_status/processes.lua	2017-10-08 18:01:43.360836621 +0000
+@@ -13,22 +13,4 @@
+ t:option(DummyValue, "%CPU", translate("CPU usage (%)"))
+ t:option(DummyValue, "%MEM", translate("Memory usage (%)"))
+ 
+-hup = t:option(Button, "_hup", translate("Hang Up"))
+-hup.inputstyle = "reload"
+-function hup.write(self, section)
+-	null, self.tag_error[section] = luci.sys.process.signal(section, 1)
+-end
+-
+-term = t:option(Button, "_term", translate("Terminate"))
+-term.inputstyle = "remove"
+-function term.write(self, section)
+-	null, self.tag_error[section] = luci.sys.process.signal(section, 15)
+-end
+-
+-kill = t:option(Button, "_kill", translate("Kill"))
+-kill.inputstyle = "reset"
+-function kill.write(self, section)
+-	null, self.tag_error[section] = luci.sys.process.signal(section, 9)
+-end
+-
+ return f
+\ No newline at end of file
+--- /dev/null   1970-01-01 00:00:00.000000000 +0000
++++ usr/lib/lua/luci/model/cbi/admin_system/processes.lua	2017-10-08 16:12:38.342503669 +0000
+@@ -0,0 +1,34 @@
++-- Copyright 2008 Steven Barth <steven@midlink.org>
++-- Copyright 2008 Jo-Philipp Wich <jow@openwrt.org>
++-- Licensed to the public under the Apache License 2.0.
++
++f = SimpleForm("processes", translate("Processes"), translate("This list gives an overview over currently running system processes and their status."))
++f.reset = false
++f.submit = false
++
++t = f:section(Table, luci.sys.process.list())
++t:option(DummyValue, "PID", translate("PID"))
++t:option(DummyValue, "USER", translate("Owner"))
++t:option(DummyValue, "COMMAND", translate("Command"))
++t:option(DummyValue, "%CPU", translate("CPU usage (%)"))
++t:option(DummyValue, "%MEM", translate("Memory usage (%)"))
++
++hup = t:option(Button, "_hup", translate("Hang Up"))
++hup.inputstyle = "reload"
++function hup.write(self, section)
++	null, self.tag_error[section] = luci.sys.process.signal(section, 1)
++end
++
++term = t:option(Button, "_term", translate("Terminate"))
++term.inputstyle = "remove"
++function term.write(self, section)
++	null, self.tag_error[section] = luci.sys.process.signal(section, 15)
++end
++
++kill = t:option(Button, "_kill", translate("Kill"))
++kill.inputstyle = "reset"
++function kill.write(self, section)
++	null, self.tag_error[section] = luci.sys.process.signal(section, 9)
++end
++
++return f
