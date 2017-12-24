@@ -1,0 +1,66 @@
+opkg install ngircd
+
+cat << EOF > /etc/ngircd.conf
+[Global]
+	Name = router.lan
+	Info = Server Info Text
+[Options]
+	WebircPassword = xyz
+[Channel]
+	Name = #lobby
+EOF
+
+
+opkg install npm
+npm install -g thelounge
+mkdir /etc/lounge
+
+cat << EOF > /etc/lounge/config.js
+"use strict";                                                                      
+module.exports = {
+        public: true,
+        host: undefined,
+        port: 9000,
+        bind: undefined,
+        theme: "example",
+        prefetch: true,
+        prefetchMaxImageSize: 10240,
+        displayNetwork: true,
+        lockNetwork: true,
+        webirc: {"127.0.0.1": "xyz"},
+        defaults: {
+                name: "irc://router.lan:6667",
+                host: "127.0.0.1",
+                port: 6667,
+                password: "",
+                tls: false,
+                nick: "guest",
+                username: "",
+                realname: "",
+                join: "#lobby"
+        },
+        leaveMessage: ""
+};
+EOF
+
+cat << EOF > /etc/init.d/lounge 
+#!/bin/sh /etc/rc.common
+
+USE_PROCD=1
+START=65
+
+start_service() {
+  procd_open_instance lounge
+  procd_set_param command /usr/bin/lounge start
+  procd_set_param env LOUNGE_HOME=/etc/lounge
+  procd_set_param file /etc/lounge/config.js
+  procd_set_param stdout 1
+  procd_set_param stderr 1
+  procd_set_param pidfile /var/run/lounge.pid
+  procd_close_instance
+}
+EOF
+
+
+/etc/init.d/lounge enable
+/etc/init.d/lounge start

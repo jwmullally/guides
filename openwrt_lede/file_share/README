@@ -1,0 +1,57 @@
+# Share files and directories using OpenWrt / LEDE builtin uhttpd server
+
+mkdir /www/files
+echo "Test file" > /www/files
+
+# Web server follows symlinks
+ln -s /mnt /www/files/mnt
+ln -s /srv /www/files/srv
+ln -s /srv/upload /www/files/upload
+
+# Samba
+opkg install samba36-server luci-app-samba
+sed -i -e 's/security = user/security = share/g' /etc/samba/smb.conf.template
+uci set samba.@samba[0].homes='0'
+uci add samba sambashare
+uci set samba.@sambashare[-1].name='srv'
+uci set samba.@sambashare[-1].path='/srv'
+uci set samba.@sambashare[-1].read_only='yes'
+uci set samba.@sambashare[-1].guest_ok='yes'
+uci add samba sambashare
+uci set samba.@sambashare[-1].name='upload'
+uci set samba.@sambashare[-1].path='/srv/upload'
+uci set samba.@sambashare[-1].read_only='no'
+uci set samba.@sambashare[-1].guest_ok='yes'
+uci set samba.@sambashare[-1].create_mask='666'
+uci set samba.@sambashare[-1].dir_mask='777'
+uci add samba sambashare
+uci set samba.@sambashare[-1].name='mnt'
+uci set samba.@sambashare[-1].path='/mnt'
+uci set samba.@sambashare[-1].read_only='yes'
+uci set samba.@sambashare[-1].guest_ok='yes'
+uci commit samba
+
+# NFS
+opkg install nfs-kernel-server
+cat << EOF > /etc/exports 
+/mnt	*(ro,all_squash,insecure,sync,no_subtree_check)
+/srv	*(ro,all_squash,insecure,sync,no_subtree_check)
+/srv/upload	*(ro,all_squash,insecure,sync,no_subtree_check)
+EOF
+
+# Automount USB
+opkg install block-mount
+uci delete fstab.@mount[-1]
+uci delete fstab.@mount[-1]
+uci set fstab.@global[0].auto_swap='1'
+uci commit fstab
+
+# Resize root filesystem
+opkg install sfdisk e2fsprogs
+echo ", +" | sfdisk --no-reread --partno 2 /dev/mmcblk0
+reboot
+resize2fs /dev/mmcblk0p2
+# If you get this, you'll need to resize offline on another host
+#EXT4-fs (mmcblk0p2): resizing filesystem from 98304 to 1962752 blocks
+#EXT4-fs warning (device mmcblk0p2): ext4_group_add:1605: No reserved GDT blocks, can't resize
+

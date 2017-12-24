@@ -1,0 +1,46 @@
+
+opkg install avahi-nodbus-daemon
+
+sed -i -e 's/use-ipv6=yes/use-ipv6=no/g' /etc/avahi/avahi-daemon.conf
+opkg install avahi-daemon-service-http avahi-daemon-service-ssh
+
+cat << EOF > /etc/avahi/services/smb.service
+<?xml version="1.0" standalone='no'?><!--*-nxml-*-->
+<!DOCTYPE service-group SYSTEM "avahi-service.dtd">
+<service-group>
+ <name replace-wildcards="yes">%h</name>
+  <service>
+   <type>_smb._tcp</type>
+   <port>445</port>
+  </service>
+</service-group>
+EOF
+
+cat << EOF > /etc/avahi/services/domain.service
+<?xml version="1.0" standalone='no'?><!--*-nxml-*-->
+<!DOCTYPE service-group SYSTEM "avahi-service.dtd">
+<service-group>
+ <name replace-wildcards="yes">%h</name>
+  <service>
+   <type>_domain._udp</type>
+   <port>53</port>
+  </service>
+</service-group>
+EOF
+
+cat << EOF > /etc/avahi/services/irc.service
+<?xml version="1.0" standalone='no'?><!--*-nxml-*-->
+<!DOCTYPE service-group SYSTEM "avahi-service.dtd">
+<service-group>
+ <name replace-wildcards="yes">%h</name>
+  <service>
+   <type>_irc._tcp</type>
+   <port>6667</port>
+  </service>
+  <service>
+   <type>_irc_http._tcp</type>
+   <port>9000</port>
+   <txt-record>path=/</txt-record>
+  </service>
+</service-group>
+EOF
